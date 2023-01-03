@@ -41,12 +41,51 @@ void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client);
 void close_mqtt();
 
 // Global shared variables
+volatile int angle, targetAngle = 3; 
+volatile int Kp = 1;                 
+volatile float tCycle;
+volatile int theta;
+volatile int thetaP;
+volatile int turns = 0;
+float angle_buff = 0;
+float d = 0;
+
 volatile int message_num = 0;
 volatile int arrivedcount = 0;
 volatile bool closed = false;
 const char* topic = "Mbed";
 int mode = 0;
 int mode_buff = 0;
+
+void feedback360()
+{ // Position monitoring
+    tCycle = pin12.period();
+    int dc = dutyScale * pin12.dutycycle();
+    theta = (unitsFC - 1) - // Calculate angle
+            ((dc - dcMin) * unitsFC) / (dcMax - dcMin + 1);
+    if (theta < 0) // Keep theta valid
+        theta = 0;
+    else if (theta > (unitsFC - 1))
+        theta = unitsFC - 1;
+
+    // If transition from quadrant 4 to
+    // quadrant 1, increase turns count.
+    if ((theta < q2min) && (thetaP > q3max))
+        turns++;
+    // If transition from quadrant 1 to
+    // quadrant 4, decrease turns count.
+    else if ((thetaP < q2min) && (theta > q3max))
+        turns--;
+
+    // Construct the angle measurement from the turns count and
+    // current theta value.
+    if (turns >= 0)
+        angle = (turns * unitsFC) + theta;
+    else if (turns < 0)
+        angle = ((turns + 1) * unitsFC) - (unitsFC - theta);
+
+    thetaP = theta; // Theta previous for next rep
+}
 
 void u_turn()
 {
@@ -58,6 +97,7 @@ void u_turn()
 
 void qti_track()
 {
+    servo_feedback_ticker.attach(&feedback360, 5ms);                        // servo feedback system                 
     parallax_qti qti1(qti_pin);
     parallax_laserping ping1(pin8);
     int pattern;
@@ -75,7 +115,11 @@ void qti_track()
             case 0b0010: car.turn(50, -0.7); break;
             case 0b0011: car.turn(40, -0.5); break;
             case 0b0001: car.turn(40, -0.1); break;
-            case 0b0000: distance = 18; mode = extend; break;               // extend ping distance
+            case 0b0000:                                                    // extend ping distance and output distance
+                distance = 18; 
+                mode = extend;
+                d = (angle-angle_buff)/360*2*3.1415;
+                break;               
             case 0b1111:                                                    // turn left mode
                 car.stop();
                 mode = left;
@@ -118,7 +162,7 @@ void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
     
     if(mode == left) sprintf(buff, "Operation #%d: Turning left...", message_num);
     else if(mode == uturn) sprintf(buff, "Operation #%d: Meet Obstacle! U-turning...", message_num);
-    else if(mode == extend) sprintf(buff, "Operation #%d: Extend ping range!", message_num);
+    else if(mode == extend) sprintf(buff, "Operation #%d: Extend ping range! distance = %f", message_num, d);
     else sprintf(buff, "Operation #%d: Normal operation.", message_num);
 
     mode = mode_buff;                                                           // back to normal mode 
@@ -138,6 +182,7 @@ void close_mqtt() {
 }
 
 int main() {
+     
     t_track.start((callback(&queue_qti, &EventQueue::dispatch_forever))); 
     queue_qti.call(qti_track);                                                  // Initiate QTI path sensing
 
