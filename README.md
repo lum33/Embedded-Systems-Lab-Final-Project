@@ -16,9 +16,9 @@
 
 3. Ping function is available, when laser ping sense the distance between obstacle and car is lesser than 10cm, it will u-turn.
 
-3. When BB car sense the all white marker (0000), it means that BB car will u-turn when the distance between obstacle and car is lesser than 18cm.
+4. When BB car sense the all white marker (0000), it means that BB car will u-turn when the distance between obstacle and car is lesser than 18cm.
 
-4. Picture below shows the output results in python terminal which is implemented by connecting MQTT broker server as client:
+5. Picture below shows the output results in python terminal which is implemented by connecting MQTT broker server as client:
 
   ![](https://github.com/lum33/final/blob/main/folder/py1.JPG)
   
